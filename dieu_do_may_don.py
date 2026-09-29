@@ -557,13 +557,16 @@ def choose_input_data():
 
 
 def calculate_srpt_job_times(result_df):
-    """Tạo đúng một dòng cho mỗi công việc SRPT, dùng lần bắt đầu đầu tiên."""
+    """Bảng thời gian mỗi công việc SRPT (dùng lần bắt đầu đầu tiên S_j):
+    - Thời gian hoàn thành = C_j - r_j
+    - Thời gian chờ        = (C_j - r_j) - p_j
+    - Thời gian đáp ứng    = S_j - r_j
+    """
+    completion = result_df["completion_time"] - result_df["r"]
     return pd.DataFrame({
         "Job ID": result_df["job_id"].to_numpy(),
-        "Thời gian hoàn thành": result_df["completion_time"].to_numpy(),
-        "Thời gian chờ": (
-            result_df["completion_time"] - result_df["r"] - result_df["p"]
-        ).to_numpy(),
+        "Thời gian hoàn thành": completion.to_numpy(),
+        "Thời gian chờ": (completion - result_df["p"]).to_numpy(),
         "Thời gian đáp ứng": (
             result_df["start_time"] - result_df["r"]
         ).to_numpy(),

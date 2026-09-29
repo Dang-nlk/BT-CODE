@@ -272,7 +272,7 @@ def results_section_ui():
                              use_container_width=True, hide_index=True)
                 if rule_key == "SRPT":
                     # Bảng thời gian theo TỪNG công việc (hàm nằm ở dieu_do_may_don.py):
-                    # hoàn thành = C_j, chờ = C_j - r_j - p_j, đáp ứng = S_j(lần đầu) - r_j
+                    # hoàn thành = C_j - r_j, chờ = (C_j - r_j) - p_j, đáp ứng = S_j(lần đầu) - r_j
                     st.markdown("**Bảng thời gian của từng công việc – SRPT**")
                     srpt_job_times = backend.calculate_srpt_job_times(res["result_df"])
                     st.dataframe(
