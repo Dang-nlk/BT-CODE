@@ -26,7 +26,7 @@ Bố cục file (đọc theo thứ tự để dễ định vị khi cần sửa)
 =============================================================================
 """
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from math import isfinite
 from numbers import Real
 from pathlib import Path
@@ -447,8 +447,6 @@ def calculate_metrics(result_df, rule_name):
         raise ValueError("Bảng kết quả phải là DataFrame không rỗng.")
 
     required = ["p", "r", "completion_time"]
-    if rule_name == "SRPT":
-        required.append("start_time")
     missing = [col for col in required if col not in result_df.columns]
     if missing:
         raise ValueError("Bảng kết quả thiếu cột: " + ", ".join(missing))
@@ -478,15 +476,6 @@ def calculate_metrics(result_df, rule_name):
         "Thời gian trung bình trong hệ thống": average_time_in_system,
     }
 
-    if rule_name == "SRPT":
-        # Hoàn thành TB theo môn học: trung bình (C_j - r_j).
-        metrics["Thời gian hoàn thành trung bình"] = average_time_in_system
-        # Thời gian chờ gồm cả chờ trước lần chạy đầu và chờ sau ngắt.
-        metrics["Thời gian chờ trung bình"] = float((system_time - data["p"]).mean())
-        # Thời gian đáp ứng chỉ tính đến lần bắt đầu gia công đầu tiên.
-        metrics["Thời gian đáp ứng trung bình"] = float(
-            (data["start_time"] - data["r"]).mean()
-        )
     return metrics
 
 
@@ -557,98 +546,17 @@ def choose_input_data():
 
 
 def calculate_srpt_job_times(result_df):
-    """Bảng thời gian mỗi công việc SRPT (dùng lần bắt đầu đầu tiên S_j):
-    - Thời gian hoàn thành = C_j - r_j
-    - Thời gian chờ        = (C_j - r_j) - p_j
-    - Thời gian đáp ứng    = S_j - r_j
-    """
-    completion = result_df["completion_time"] - result_df["r"]
+    """Tạo đúng một dòng cho mỗi công việc SRPT, dùng lần bắt đầu đầu tiên."""
     return pd.DataFrame({
         "Job ID": result_df["job_id"].to_numpy(),
-        "Thời gian hoàn thành": completion.to_numpy(),
-        "Thời gian chờ": (completion - result_df["p"]).to_numpy(),
+        "Thời gian hoàn thành": result_df["completion_time"].to_numpy(),
+        "Thời gian chờ": (
+            result_df["completion_time"] - result_df["r"] - result_df["p"]
+        ).to_numpy(),
         "Thời gian đáp ứng": (
             result_df["start_time"] - result_df["r"]
         ).to_numpy(),
     })
-
-
-def _format_table_time(value):
-    """In số nguyên không có .0; số thập phân tối đa hai chữ số."""
-    rounded = Decimal(str(value)).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-    if rounded == 0:
-        return "0"
-    return format(rounded, "f").rstrip("0").rstrip(".") if "." in format(rounded, "f") else format(rounded, "f")
-
-
-def plot_gantt(schedule_segments, rule_name):
-    """Vẽ từng đoạn gia công của một luật và lưu PNG cạnh file Python."""
-    import matplotlib.pyplot as plt
-    from matplotlib.colors import to_rgb
-
-    if not schedule_segments:
-        raise ValueError("Không có đoạn gia công để vẽ biểu đồ Gantt.")
-
-    job_ids = list(dict.fromkeys(
-        segment["job_id"] for segment in schedule_segments
-    ))
-    # Cùng một Job ID giữ cùng màu qua mọi lần bị ngắt và chạy lại.
-    if len(job_ids) <= 20:
-        palette = plt.get_cmap("tab20")
-        colors = {job_id: palette(index) for index, job_id in enumerate(job_ids)}
-    else:
-        palette = plt.get_cmap("hsv", len(job_ids) + 1)
-        colors = {job_id: palette(index) for index, job_id in enumerate(job_ids)}
-
-    display_name = rule_name
-    file_name = f"gantt_{display_name.lower()}.png"
-    output_path = Path(__file__).resolve().parent / file_name
-
-    with plt.rc_context({"font.family": "Arial"}):
-        fig, ax = plt.subplots(
-            figsize=(max(10, min(18, 2 + len(schedule_segments) * 0.7)), 3.2)
-        )
-        previous_end = 0.0
-        for segment in schedule_segments:
-            start = float(segment["start"])
-            end = float(segment["end"])
-            if end <= start or start < previous_end:
-                plt.close(fig)
-                raise ValueError("Các đoạn Gantt phải có thời lượng dương và không chồng lấn.")
-            if start > previous_end:
-                idle_width = start - previous_end
-                ax.barh(0, idle_width, left=previous_end, height=0.58,
-                        color="#b0b0b0", edgecolor="white", linewidth=1, zorder=3)
-                ax.text(previous_end + idle_width / 2, 0, "Idle",
-                        ha="center", va="center", color="black", fontsize=10, zorder=4)
-
-            job_id = segment["job_id"]
-            color = colors[job_id]
-            duration = end - start
-            ax.barh(0, duration, left=start, height=0.58,
-                    color=color, edgecolor="white", linewidth=1, zorder=3)
-            red, green, blue = to_rgb(color)
-            text_color = "black" if (0.299 * red + 0.587 * green + 0.114 * blue) > 0.55 else "white"
-            ax.text(start + duration / 2, 0, str(job_id),
-                    ha="center", va="center", color=text_color, fontsize=10, zorder=4)
-            previous_end = end
-
-        ax.set_xlim(0, previous_end * 1.03)
-        ax.set_ylim(-0.65, 0.65)
-        ax.set_yticks([0])
-        ax.set_yticklabels(["Máy đơn"])
-        ax.set_xlabel("Thời gian")
-        ax.set_title(f"Biểu đồ Gantt – {display_name}")
-        ax.grid(axis="x", linestyle="--", alpha=0.25, zorder=0)
-        plt.tight_layout()
-        try:
-            fig.savefig(output_path, dpi=160)
-            plt.show()
-        finally:
-            plt.close(fig)
-    return output_path
 
 
 def display_rule_result(rule_name, jobs, scheduler):
