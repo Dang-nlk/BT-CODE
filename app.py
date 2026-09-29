@@ -271,18 +271,14 @@ def results_section_ui():
                 st.dataframe(display_df.style.format(precision=2),
                              use_container_width=True, hide_index=True)
                 if rule_key == "SRPT":
-                    srpt_extra = {k: res["metrics"][k] for k in backend.SRPT_EXTRA_COLUMNS}
-                    # 1. Khởi tạo df_srpt trước
-                    df_srpt = pd.DataFrame([srpt_extra]).T.rename(columns={0: "Giá trị"})
-                    
-                    # 2. Gán tên index cho df_srpt (phải nằm trong khối if này)
-                    df_srpt.index.name = "Thông số"
-                    
-                    # 3. Hiển thị bảng
+                    # Bảng thời gian theo TỪNG công việc (hàm nằm ở dieu_do_may_don.py):
+                    # hoàn thành = C_j, chờ = C_j - r_j - p_j, đáp ứng = S_j(lần đầu) - r_j
+                    st.markdown("**Bảng thời gian của từng công việc – SRPT**")
+                    srpt_job_times = backend.calculate_srpt_job_times(res["result_df"])
                     st.dataframe(
-                        df_srpt.style.format(precision=2),
-                        use_container_width=False, 
-                        hide_index=False
+                        srpt_job_times.style.format(precision=2),
+                        use_container_width=True,
+                        hide_index=True,
                     )
 
 # -----------------------------------------------------------------------------

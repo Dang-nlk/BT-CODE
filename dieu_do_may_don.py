@@ -26,7 +26,7 @@ Bố cục file (đọc theo thứ tự để dễ định vị khi cần sửa)
 =============================================================================
 """
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
 from numbers import Real
 from pathlib import Path
@@ -440,7 +440,7 @@ def calculate_job_results(jobs, schedule_result):
 
 
 def calculate_metrics(result_df, rule_name):
-    """Tính KPI môn học; SRPT có thêm ba chỉ số trung bình ở kết quả riêng."""
+    """Tính các KPI tổng hợp chung của năm luật theo công thức môn học."""
     if rule_name not in {"FCFS", "SPT", "EDD", "LPT", "SRPT"}:
         raise ValueError("Tên luật không hợp lệ.")
     if not isinstance(result_df, pd.DataFrame) or result_df.empty:
@@ -556,26 +556,123 @@ def choose_input_data():
             print(f"Lỗi: {exc}\nVui lòng chọn cách nhập và thử lại.")
 
 
+def calculate_srpt_job_times(result_df):
+    """Tạo đúng một dòng cho mỗi công việc SRPT, dùng lần bắt đầu đầu tiên."""
+    return pd.DataFrame({
+        "Job ID": result_df["job_id"].to_numpy(),
+        "Thời gian hoàn thành": result_df["completion_time"].to_numpy(),
+        "Thời gian chờ": (
+            result_df["completion_time"] - result_df["r"] - result_df["p"]
+        ).to_numpy(),
+        "Thời gian đáp ứng": (
+            result_df["start_time"] - result_df["r"]
+        ).to_numpy(),
+    })
+
+
+def _format_table_time(value):
+    """In số nguyên không có .0; số thập phân tối đa hai chữ số."""
+    rounded = Decimal(str(value)).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    if rounded == 0:
+        return "0"
+    return format(rounded, "f").rstrip("0").rstrip(".") if "." in format(rounded, "f") else format(rounded, "f")
+
+
+def plot_gantt(schedule_segments, rule_name):
+    """Vẽ từng đoạn gia công của một luật và lưu PNG cạnh file Python."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_rgb
+
+    if not schedule_segments:
+        raise ValueError("Không có đoạn gia công để vẽ biểu đồ Gantt.")
+
+    job_ids = list(dict.fromkeys(
+        segment["job_id"] for segment in schedule_segments
+    ))
+    # Cùng một Job ID giữ cùng màu qua mọi lần bị ngắt và chạy lại.
+    if len(job_ids) <= 20:
+        palette = plt.get_cmap("tab20")
+        colors = {job_id: palette(index) for index, job_id in enumerate(job_ids)}
+    else:
+        palette = plt.get_cmap("hsv", len(job_ids) + 1)
+        colors = {job_id: palette(index) for index, job_id in enumerate(job_ids)}
+
+    display_name = rule_name
+    file_name = f"gantt_{display_name.lower()}.png"
+    output_path = Path(__file__).resolve().parent / file_name
+
+    with plt.rc_context({"font.family": "Arial"}):
+        fig, ax = plt.subplots(
+            figsize=(max(10, min(18, 2 + len(schedule_segments) * 0.7)), 3.2)
+        )
+        previous_end = 0.0
+        for segment in schedule_segments:
+            start = float(segment["start"])
+            end = float(segment["end"])
+            if end <= start or start < previous_end:
+                plt.close(fig)
+                raise ValueError("Các đoạn Gantt phải có thời lượng dương và không chồng lấn.")
+            if start > previous_end:
+                idle_width = start - previous_end
+                ax.barh(0, idle_width, left=previous_end, height=0.58,
+                        color="#b0b0b0", edgecolor="white", linewidth=1, zorder=3)
+                ax.text(previous_end + idle_width / 2, 0, "Idle",
+                        ha="center", va="center", color="black", fontsize=10, zorder=4)
+
+            job_id = segment["job_id"]
+            color = colors[job_id]
+            duration = end - start
+            ax.barh(0, duration, left=start, height=0.58,
+                    color=color, edgecolor="white", linewidth=1, zorder=3)
+            red, green, blue = to_rgb(color)
+            text_color = "black" if (0.299 * red + 0.587 * green + 0.114 * blue) > 0.55 else "white"
+            ax.text(start + duration / 2, 0, str(job_id),
+                    ha="center", va="center", color=text_color, fontsize=10, zorder=4)
+            previous_end = end
+
+        ax.set_xlim(0, previous_end * 1.03)
+        ax.set_ylim(-0.65, 0.65)
+        ax.set_yticks([0])
+        ax.set_yticklabels(["Máy đơn"])
+        ax.set_xlabel("Thời gian")
+        ax.set_title(f"Biểu đồ Gantt – {display_name}")
+        ax.grid(axis="x", linestyle="--", alpha=0.25, zorder=0)
+        plt.tight_layout()
+        try:
+            fig.savefig(output_path, dpi=160)
+            plt.show()
+        finally:
+            plt.close(fig)
+    return output_path
+
+
 def display_rule_result(rule_name, jobs, scheduler):
-    """In kết quả từng luật; SRPT bổ sung ba chỉ số trung bình trong bảng riêng."""
+    """In kết quả từng luật; SRPT có thêm bảng thời gian theo công việc."""
     schedule = scheduler(jobs)
     result = calculate_job_results(jobs, schedule)
     metrics = calculate_metrics(result, rule_name)
     print("\n" + "=" * 80)
     print(f"KẾT QUẢ LUẬT {rule_name}")
     print("\nA. THỨ TỰ MÁY CHẠY")
-    if rule_name == "SRPT":
-        print(format_machine_order(schedule))
-    else:
-        print(" → ".join(str(segment["job_id"]) for segment in schedule["segments"]))
+    print("Thứ tự máy chạy:", format_machine_order(schedule))
     print("\nB. BẢNG KẾT QUẢ CHI TIẾT (theo lần bắt đầu chạy, mỗi công việc một dòng)")
     print(result.rename(columns=DISPLAY_COLUMNS).to_string(
         index=False, float_format=lambda value: f"{value:.6g}"
     ))
+    if rule_name == "SRPT":
+        job_times = calculate_srpt_job_times(result)
+        print("\nBẢNG THỜI GIAN CỦA TỪNG CÔNG VIỆC – SRPT")
+        print(job_times.to_string(
+            index=False,
+            formatters={
+                column: _format_table_time
+                for column in job_times.columns if column != "Job ID"
+            },
+        ))
     print("\nC. BẢNG CHỈ SỐ RIÊNG")
-    metric_columns = RULE_METRIC_COLUMNS + (
-        SRPT_EXTRA_COLUMNS if rule_name == "SRPT" else []
-    )
+    metric_columns = RULE_METRIC_COLUMNS
     metric_rows = [
         {
             "Chỉ số": key,
@@ -585,6 +682,7 @@ def display_rule_result(rule_name, jobs, scheduler):
         for key in metric_columns
     ]
     print(pd.DataFrame(metric_rows).to_string(index=False))
+    plot_gantt(schedule["segments"], rule_name)
     return metrics
 
 
