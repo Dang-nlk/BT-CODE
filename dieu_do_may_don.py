@@ -549,7 +549,7 @@ def calculate_srpt_job_times(result_df):
     """Tạo đúng một dòng cho mỗi công việc SRPT, dùng lần bắt đầu đầu tiên."""
     return pd.DataFrame({
         "Job ID": result_df["job_id"].to_numpy(),
-        "Thời gian hoàn thành": result_df["completion_time"].to_numpy(),
+        "Thời gian hoàn thành": (result_df["completion_time"] - result_df["r"]).to_numpy(),
         "Thời gian chờ": (
             result_df["completion_time"] - result_df["r"] - result_df["p"]
         ).to_numpy(),
