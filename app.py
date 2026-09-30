@@ -271,12 +271,12 @@ def results_section_ui():
                 st.dataframe(display_df.style.format(precision=2),
                              use_container_width=True, hide_index=True)
                 if rule_key == "SRPT":
-                    st.markdown("**Bảng thời gian của từng công việc – SRPT**")
-                    srpt_job_times = backend.calculate_srpt_job_times(res["result_df"])
+                    job_times = backend.calculate_srpt_job_times(res["result_df"])
+                    st.markdown("**Bảng thời gian chi tiết của từng công việc (SRPT):**")
                     st.dataframe(
-                        srpt_job_times.style.format(precision=2),
-                        use_container_width=True,
-                        hide_index=True,
+                        job_times.style.format(precision=2),
+                        use_container_width=True, 
+                        hide_index=True
                     )
 
 # -----------------------------------------------------------------------------
