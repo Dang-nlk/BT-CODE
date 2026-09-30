@@ -79,11 +79,7 @@ RULE_METRIC_COLUMNS = [
     "Số lượng công việc trung bình trong hệ thống",
     "Thời gian trung bình trong hệ thống",
 ]
-SRPT_EXTRA_COLUMNS = [
-    "Thời gian hoàn thành trung bình",
-    "Thời gian chờ trung bình",
-    "Thời gian đáp ứng trung bình",
-]
+
 SAMPLE_JOBS = [
     {"job_id": "J1", "p": 8, "r": 0, "d": 12, "w": 2},
     {"job_id": "J2", "p": 4, "r": 1, "d": 7, "w": 1},
