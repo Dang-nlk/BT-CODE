@@ -29,7 +29,6 @@ RULE_FULL_NAME = {
 MACHINE_LABEL = "Máy đơn"
 SOURCE_MANUAL, SOURCE_FILE = "Nhập thủ công", "Tải file CSV/Excel"
 
-# Streamlit mới (>= 1.49) dùng width="stretch"; bản cũ dùng use_container_width=True.
 _VERSION = tuple(int(x) for x in st.__version__.split(".")[:2] if x.isdigit())
 STRETCH = {"width": "stretch"} if _VERSION >= (1, 49) else {"use_container_width": True}
 
