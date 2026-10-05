@@ -32,7 +32,7 @@ SOURCE_MANUAL, SOURCE_FILE = "Nhập thủ công", "Tải file CSV/Excel"
 _VERSION = tuple(int(x) for x in st.__version__.split(".")[:2] if x.isdigit())
 STRETCH = {"width": "stretch"} if _VERSION >= (1, 49) else {"use_container_width": True}
 
-# Bảng màu hệ thống của Apple, dùng cho biểu đồ Gantt.
+# Bảng màu cho biểu đồ Gantt.
 APPLE_COLORS = [
     "#0A84FF", "#30D158", "#FF9F0A", "#BF5AF2", "#FF453A", "#64D2FF",
     "#FFD60A", "#5E5CE6", "#AC8E68", "#63E6E2", "#FF375F", "#98989D",
@@ -42,124 +42,135 @@ FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvet
 
 # -----------------------------------------------------------------------------
 # 1. PHONG CÁCH GIAO DIỆN
+# Quy tắc màu: chữ đen trên nền trắng; chữ trắng trên nền đen; nhấn mạnh bằng chữ đỏ.
 # -----------------------------------------------------------------------------
 STYLE = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--mute:#6e6e73;--line:#d2d2d7;--soft:#ececf0;
-      --blue:#0071e3;--blue-h:#0077ed;}
+:root{--bg:#f5f5f7;--card:#fff;--ink:#000;--mute:#1d1d1f;--line:#d2d2d7;--soft:#ececf0;
+      --red:#d70015;--red-on-dark:#ff453a;}
 
-/* Nền tảng và chữ */
+/* Nền tảng và chữ: ép chữ đen trên nền sáng */
 .stApp{background:var(--bg);color:var(--ink);}
-.stApp,.stApp p,.stApp label,.stApp li,.stApp button,.stApp input,.stApp textarea,.stApp table,
-.stApp div[data-testid="stMarkdownContainer"]{
+.stApp,.stApp p,.stApp label,.stApp li,.stApp span,.stApp button,.stApp input,.stApp textarea,.stApp table,
+.stApp h1,.stApp h2,.stApp h3,.stApp div[data-testid="stMarkdownContainer"]{
+  color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased;letter-spacing:-.011em;}
 header[data-testid="stHeader"],footer,#MainMenu,[data-testid="stToolbar"],[data-testid="stDecoration"],
 [data-testid="stSidebar"],[data-testid="collapsedControl"],[data-testid="stSidebarCollapsedControl"]{display:none!important;}
-.block-container{max-width:1080px;padding:84px 24px 120px!important;}
-[data-testid="stVerticalBlock"]{gap:1.1rem;}
+.block-container{max-width:1080px;padding:96px 24px 140px!important;}
+/* Tăng khoảng cách giữa các hàng/khối */
+[data-testid="stVerticalBlock"]{gap:2rem;}
 
-/* Thanh điều hướng mờ kính */
-.nav{position:fixed;top:0;left:0;right:0;height:48px;z-index:1000;background:rgba(251,251,253,.8);
+/* Thanh điều hướng: trái = tên môn, phải = nhóm */
+.nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:1000;background:rgba(255,255,255,.92);
   -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
-  border-bottom:1px solid rgba(0,0,0,.08);}
+  border-bottom:1px solid rgba(0,0,0,.12);}
 .nav>div{max-width:1032px;height:100%;margin:0 auto;display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;font-size:14px;}
-.nav b{font-weight:600;color:var(--ink);}
-.nav span{color:var(--mute);font-size:12px;letter-spacing:.02em;}
+  padding:0 24px;font-size:15px;}
+.nav b{font-weight:600;color:#000;}
+.nav span{color:#000;font-size:14px;font-weight:500;}
 
-/* Hero */
-.hero{text-align:center;padding:64px 0 36px;}
-.hero .t{font-size:clamp(40px,6.4vw,68px);line-height:1.05;font-weight:600;letter-spacing:-.03em;color:var(--ink);}
-.hero .s{font-size:clamp(17px,2.1vw,24px);line-height:1.4;color:var(--mute);margin:16px auto 0;max-width:660px;font-weight:400;}
+/* Hero: mô tả bên trái, tiêu đề bên phải, cùng một hàng */
+.hero{display:flex;align-items:baseline;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  padding:48px 0 28px;}
+.hero .s{font-size:clamp(17px,2.1vw,24px);line-height:1.3;color:#000;font-weight:500;text-align:left;}
+.hero .t{font-size:clamp(36px,5.4vw,60px);line-height:1.05;font-weight:600;letter-spacing:-.03em;color:#000;text-align:right;}
 
 /* Thẻ nội dung */
 .card-anchor,div[data-testid="stElementContainer"]:has(.card-anchor),.element-container:has(.card-anchor){display:none!important;}
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){
-  background:var(--card)!important;border:none!important;border-radius:28px!important;padding:40px 40px 32px!important;box-shadow:none!important;}
-.eyebrow{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.01em;margin-bottom:6px;}
-.sec-title{font-size:clamp(28px,3.6vw,40px);line-height:1.1;font-weight:600;letter-spacing:-.025em;color:var(--ink);}
-.sec-sub{font-size:17px;line-height:1.45;color:var(--mute);margin:10px 0 0;max-width:640px;}
-.hint{font-size:14px;line-height:1.5;color:var(--mute);}
-.hint b{color:var(--ink);font-weight:600;}
-.mini{font-size:14px;font-weight:600;color:var(--ink);margin:6px 0 2px;}
+  background:var(--card)!important;border:none!important;border-radius:28px!important;padding:44px 40px 40px!important;
+  box-shadow:none!important;margin-bottom:1.5rem;}
+.eyebrow{font-size:14px;font-weight:600;color:#000;letter-spacing:.01em;margin-bottom:8px;}
+.sec-title{font-size:clamp(28px,3.6vw,40px);line-height:1.1;font-weight:600;letter-spacing:-.025em;color:#000;}
+.sec-sub{font-size:17px;line-height:1.5;color:#000;margin:14px 0 8px;max-width:640px;}
+.hint{font-size:14px;line-height:1.6;color:#000;margin:8px 0;}
+.hint b{color:#000;font-weight:600;}
+.mini{font-size:15px;font-weight:600;color:#000;margin:14px 0 6px;}
 
-/* Nút dạng viên thuốc */
-.stApp .stButton>button{border-radius:980px;border:none;box-shadow:none;background:#e8e8ed;color:var(--ink);
+/* Nút mặc định: nền xám nhạt, chữ đen */
+.stApp .stButton>button{border-radius:980px;border:none;box-shadow:none;background:#e8e8ed;color:#000;
   padding:10px 22px;min-height:44px;font-size:17px;font-weight:400;transition:background .2s ease;}
-.stApp .stButton>button:hover{background:#dcdce1;color:var(--ink);}
+.stApp .stButton>button:hover{background:#dcdce1;color:#000;}
 .stApp .stButton>button p{color:inherit;font-size:17px;}
+/* Nút chính: nền đen, chữ trắng */
 .stApp .stButton>button[kind="primary"],.stApp .stButton>button[data-testid="stBaseButton-primary"]{
-  background:var(--blue);color:#fff;min-height:52px;font-size:19px;}
-.stApp .stButton>button[kind="primary"]:hover,.stApp .stButton>button[data-testid="stBaseButton-primary"]:hover{background:var(--blue-h);color:#fff;}
+  background:#000;color:#fff;min-height:52px;font-size:19px;margin-top:12px;}
+.stApp .stButton>button[kind="primary"] p,.stApp .stButton>button[data-testid="stBaseButton-primary"] p{color:#fff!important;}
+.stApp .stButton>button[kind="primary"]:hover,.stApp .stButton>button[data-testid="stBaseButton-primary"]:hover{background:#2a2a2a;color:#fff;}
 
 /* Radio thành bộ chọn phân đoạn */
 .stApp div[role="radiogroup"]{background:#e8e8ed;border-radius:980px;padding:3px;display:inline-flex;gap:0;flex-wrap:nowrap;}
 .stApp div[role="radiogroup"] label{margin:0!important;padding:7px 20px;border-radius:980px;cursor:pointer;}
 .stApp div[role="radiogroup"] label>div:not(:has(p)){display:none!important;}
-.stApp div[role="radiogroup"] label p{font-size:15px;font-weight:500;white-space:nowrap;}
+.stApp div[role="radiogroup"] label p{font-size:15px;font-weight:500;white-space:nowrap;color:#000;}
 .stApp div[role="radiogroup"] label:has(input:checked){background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.14);}
 
 /* Ô chọn luật */
 div[data-testid="stColumn"]:has(div[data-testid="stCheckbox"]),div[data-testid="column"]:has(div[data-testid="stCheckbox"]){
-  background:var(--bg);border-radius:20px;padding:18px 18px 12px;}
-.stApp div[data-testid="stCheckbox"] label p{font-size:19px;font-weight:600;letter-spacing:-.02em;}
-.rule-note{font-size:13px;line-height:1.35;color:var(--mute);margin:-2px 0 0 30px;}
+  background:var(--bg);border-radius:20px;padding:20px 18px 16px;}
+.stApp div[data-testid="stCheckbox"] label p{font-size:19px;font-weight:600;letter-spacing:-.02em;color:#000;}
+.rule-note{font-size:13px;line-height:1.4;color:#000;margin:2px 0 0 30px;}
 
 /* Bảng nhập liệu, tải file, chọn */
 div[data-testid="stDataFrame"],div[data-testid="stDataEditor"]{border-radius:16px;overflow:hidden;border:1px solid var(--line);}
 section[data-testid="stFileUploaderDropzone"],div[data-testid="stFileUploaderDropzone"]{background:var(--bg);border:1px dashed var(--line);border-radius:18px;}
-.stApp div[data-baseweb="select"]>div{border-radius:12px;background:#fff;border:1px solid var(--line);min-height:44px;}
-.stApp [data-testid="stCaptionContainer"],.stApp .stCaption{color:var(--mute);}
+.stApp div[data-baseweb="select"]>div{border-radius:12px;background:#fff;border:1px solid var(--line);min-height:44px;color:#000;}
+.stApp [data-testid="stCaptionContainer"],.stApp .stCaption{color:#000;}
 
-/* Thông báo */
-.note{padding:14px 18px;border-radius:14px;font-size:15px;line-height:1.45;margin:4px 0;}
-.note.ok{background:#e6f6ea;color:#1c6b32;}
-.note.err{background:#fdecea;color:#b3261e;}
-.note.warn{background:#fff3df;color:#8a5300;}
-.note.info{background:#e8f1fc;color:#0b4f9c;}
+/* Thông báo: chữ đen trên nền sáng; lỗi/cảnh báo dùng chữ đỏ để nhấn mạnh */
+.note{padding:16px 20px;border-radius:14px;font-size:15px;line-height:1.5;margin:8px 0;color:#000;}
+.note.ok{background:#e6f6ea;color:#000;}
+.note.info{background:#e8f1fc;color:#000;}
+.note.err{background:#fdecea;color:var(--red);font-weight:600;}
+.note.warn{background:#fff3df;color:var(--red);font-weight:600;}
 
 /* Bảng kết quả */
-.tbl-wrap{overflow-x:auto;margin:6px 0 2px;}
+.tbl-wrap{overflow-x:auto;margin:10px 0 6px;}
 .stApp table.tbl{width:100%;border-collapse:collapse;border:none;font-size:15px;font-variant-numeric:tabular-nums;}
-.stApp table.tbl th{font-size:12px;font-weight:600;color:var(--mute);text-align:left;padding:12px 16px;
+.stApp table.tbl th{font-size:13px;font-weight:600;color:#000;text-align:left;padding:14px 16px;
   border:none;border-bottom:1px solid var(--line);vertical-align:bottom;background:transparent;}
-.stApp table.tbl td{padding:15px 16px;border:none;border-bottom:1px solid var(--soft);color:var(--ink);background:transparent;}
+.stApp table.tbl td{padding:18px 16px;border:none;border-bottom:1px solid var(--soft);color:#000;background:transparent;}
 .stApp table.tbl tr:last-child td{border-bottom:none;}
 .stApp table.tbl .num{text-align:right;}
-.stApp table.tbl tr.hl td{font-weight:600;color:var(--blue);}
-.stApp table.dense td,.stApp table.dense th{padding:11px 12px;font-size:14px;}
+/* Dòng nổi bật: chữ đỏ */
+.stApp table.tbl tr.hl td{font-weight:600;color:var(--red);}
+.stApp table.dense td,.stApp table.dense th{padding:14px 12px;font-size:14px;}
 
-/* Luật tốt nhất */
-.best{background:var(--bg);border-radius:22px;padding:28px 32px;margin-top:6px;}
-.best .l{font-size:14px;font-weight:600;color:var(--mute);}
-.best .v{font-size:clamp(40px,6vw,64px);line-height:1.05;font-weight:600;letter-spacing:-.03em;margin:6px 0 4px;}
-.best .s{font-size:16px;color:var(--mute);}
+/* Luật tốt nhất: nền đen, chữ trắng, giá trị nhấn mạnh bằng chữ đỏ */
+.best{background:#000;border-radius:22px;padding:32px 36px;margin-top:20px;}
+.best .l{font-size:14px;font-weight:600;color:#fff;}
+.best .v{font-size:clamp(40px,6vw,64px);line-height:1.05;font-weight:600;letter-spacing:-.03em;margin:10px 0 8px;color:var(--red-on-dark);}
+.best .s{font-size:16px;color:#fff;}
 
 /* Tab, expander */
-.stApp button[data-baseweb="tab"]{font-size:16px;padding:10px 4px;margin-right:18px;color:var(--mute);}
-.stApp button[data-baseweb="tab"][aria-selected="true"]{color:var(--ink);font-weight:600;}
-.stApp div[data-baseweb="tab-highlight"]{background:var(--blue)!important;}
+.stApp button[data-baseweb="tab"]{font-size:16px;padding:10px 4px;margin-right:18px;color:#000;}
+.stApp button[data-baseweb="tab"] p{color:#000;}
+.stApp button[data-baseweb="tab"][aria-selected="true"]{color:#000;font-weight:600;}
+.stApp div[data-baseweb="tab-highlight"]{background:var(--red)!important;}
 .stApp div[data-testid="stExpander"] details{border:1px solid var(--line);border-radius:18px;background:#fff;}
-.stApp div[data-testid="stExpander"] summary p{font-size:17px;font-weight:500;}
-.order{font-size:15px;line-height:1.6;color:var(--ink);margin:4px 0 8px;}
+.stApp div[data-testid="stExpander"] summary p{font-size:17px;font-weight:500;color:#000;}
+.order{font-size:15px;line-height:1.7;color:#000;margin:8px 0 14px;}
 .order b{font-weight:600;}
 
 /* Diễn giải tiến trình */
-ul.steps{list-style:none;margin:6px 0 0;padding:0;}
-ul.steps li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--soft);}
+ul.steps{list-style:none;margin:10px 0 0;padding:0;}
+ul.steps li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;border-bottom:1px solid var(--soft);}
 ul.steps li:last-child{border-bottom:none;}
-ul.steps b{font-size:17px;font-weight:600;display:block;}
-ul.steps em{font-style:normal;font-size:15px;color:var(--mute);}
-.pill{display:inline-block;padding:5px 14px;border-radius:980px;font-size:13px;font-weight:500;white-space:nowrap;}
-.pill.ok{background:#e6f6ea;color:#1c6b32;}
-.pill.late{background:#fff1de;color:#a24d00;}
+ul.steps b{font-size:17px;font-weight:600;display:block;color:#000;margin-bottom:4px;}
+ul.steps em{font-style:normal;font-size:15px;color:#000;}
+.pill{display:inline-block;padding:6px 14px;border-radius:980px;font-size:13px;font-weight:500;white-space:nowrap;}
+.pill.ok{background:#e6f6ea;color:#000;}
+.pill.late{background:#fdecea;color:var(--red);font-weight:600;}
 
 @media (max-width:640px){
-  div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){padding:26px 20px 22px!important;}
+  div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){padding:28px 20px 26px!important;}
   .stApp div[role="radiogroup"]{display:flex;}
   .stApp div[role="radiogroup"] label{padding:7px 12px;}
+  .hero{flex-direction:column;align-items:flex-start;}
+  .hero .t{text-align:right;align-self:flex-end;}
 }
 </style>
 """
@@ -180,9 +191,10 @@ def card_start():
 
 
 def section_head(eyebrow: str, title: str, sub: str = ""):
+    eyebrow_html = f'<div class="eyebrow">{esc(eyebrow)}</div>' if eyebrow else ""
     sub_html = f'<p class="sec-sub">{esc(sub)}</p>' if sub else ""
     st.markdown(
-        f'<div class="eyebrow">{esc(eyebrow)}</div><div class="sec-title">{esc(title)}</div>{sub_html}',
+        f'{eyebrow_html}<div class="sec-title">{esc(title)}</div>{sub_html}',
         unsafe_allow_html=True,
     )
 
@@ -257,12 +269,12 @@ def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: s
                      linecolor="#d2d2d7", rangemode="tozero")
     fig.update_yaxes(title="", showgrid=False)
     fig.update_layout(
-        height=280, bargap=0.25, legend_title_text="",
+        height=300, bargap=0.25, legend_title_text="",
         legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="left", x=0),
-        font=dict(family=FONT_STACK, size=14, color="#1d1d1f"),
+        font=dict(family=FONT_STACK, size=14, color="#000000"),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#ffffff",
         margin=dict(l=8, r=8, t=48, b=8),
-        hoverlabel=dict(bgcolor="#ffffff", font=dict(family=FONT_STACK, color="#1d1d1f")),
+        hoverlabel=dict(bgcolor="#ffffff", font=dict(family=FONT_STACK, color="#000000")),
     )
     return fig
 
@@ -272,10 +284,9 @@ def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: s
 # -----------------------------------------------------------------------------
 def header_ui():
     st.markdown(
-        '<div class="nav"><div><b>Điều độ máy đơn</b><span>FCFS · SPT · EDD · LPT · SRPT</span></div></div>'
-        '<div class="hero"><div class="t">Điều độ máy đơn.</div>'
-        '<div class="s">So sánh năm luật điều độ trên cùng một bộ công việc, '
-        'từ thứ tự gia công đến biểu đồ Gantt.</div></div>',
+        '<div class="nav"><div><b>Điều độ trong chuỗi cung ứng</b><span>L02 - Nhóm 4</span></div></div>'
+        '<div class="hero"><div class="s">Các giải thuật điều độ kinh nghiệm</div>'
+        '<div class="t">Điều độ máy đơn</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -286,7 +297,7 @@ def header_ui():
 def data_section_ui() -> pd.DataFrame:
     with st.container(border=True):
         card_start()
-        section_head("Bước 1", "Dữ liệu công việc.", "Chọn nguồn dữ liệu, sau đó kiểm tra hoặc chỉnh sửa trực tiếp trong bảng.")
+        section_head("", "Dữ liệu công việc.", "Chọn nguồn dữ liệu, sau đó kiểm tra hoặc chỉnh sửa trực tiếp trong bảng.")
 
         col_source, col_reset = st.columns([4, 1])
         with col_source:
@@ -352,7 +363,7 @@ def rules_section_ui():
 
     with st.container(border=True):
         card_start()
-        section_head("Bước 2", "Luật điều độ.", "Chọn một hoặc nhiều luật để so sánh.")
+        section_head("", "Luật điều độ.", "Chọn một hoặc nhiều luật để so sánh.")
         st.checkbox("Chọn tất cả", key="select_all_master", on_change=toggle_all_rules)
 
         selected_rules = []
