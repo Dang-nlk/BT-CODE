@@ -1,47 +1,17 @@
 # -*- coding: utf-8 -*-
-"""
-=============================================================================
-  APP STREAMLIT - ĐIỀU ĐỘ MÁY ĐƠN (SINGLE MACHINE SCHEDULING)
-=============================================================================
-File này CHỈ LÀ GIAO DIỆN (UI). Toàn bộ thuật toán điều độ (FCFS, SPT, EDD, LPT, SRPT), công thức KPI và validate dữ liệu nằm ở file `dieu_do_may_don.py` 
 
-Chạy ứng dụng:
-    pip install streamlit pandas numpy plotly openpyxl
-    streamlit run app.py
+import html
 
-Bố cục file:
-    1. IMPORT BACKEND & CONFIG TRANG
-    2. ĐỌC FILE NGƯỜI DÙNG TẢI LÊN
-    3. HÀM VẼ GANTT CHART
-    4. GIAO DIỆN: SIDEBAR
-    5. GIAO DIỆN: BẢNG NHẬP LIỆU
-    6. GIAO DIỆN: KẾT QUẢ
-    7. GIAO DIỆN: GANTT CHART
-    8. HÀM main() - ĐIỀU PHỐI TOÀN BỘ LUỒNG CHẠY
-=============================================================================
-"""
-
-import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.express as px
-from datetime import timedelta, datetime
+import streamlit as st
 
-# -----------------------------------------------------------------------------
-# 1. IMPORT BACKEND & CONFIG TRANG
-# -----------------------------------------------------------------------------
-# >>> Toàn bộ hàm dưới đây được định nghĩa trong dieu_do_may_don.py.
-#     KHÔNG sửa logic của chúng ở file này - muốn đổi thuật toán/công thức KPI thì mở dieu_do_may_don.py (đã có chú thích từng mục A-E trong đó).
 import dieu_do_may_don as backend
 
-st.set_page_config(page_title="Điều độ máy đơn", layout="wide")
+st.set_page_config(page_title="Điều độ máy đơn", layout="wide", initial_sidebar_state="collapsed")
 
-# Đăng ký các luật điều độ sẽ hiển thị thành checkbox trên giao diện.
-# key   = mã luật (dùng nội bộ, trùng với "rule_name" mà backend yêu cầu)
-# value = hàm scheduler tương ứng bên backend
-# >>> THÊM LUẬT MỚI: viết hàm schedule_xxx() trong dieu_do_may_don.py (mục C),
-#     rồi thêm 1 dòng vào dict này -> checkbox sẽ tự xuất hiện, không cần sửa
-#     gì thêm ở phần UI phía dưới.
+# Thêm luật mới: viết schedule_xxx() trong dieu_do_may_don.py rồi thêm 1 dòng vào hai dict dưới.
 SCHEDULERS = {
     "FCFS": backend.schedule_fcfs,
     "SPT": backend.schedule_spt,
@@ -56,49 +26,219 @@ RULE_FULL_NAME = {
     "LPT": "LPT - Longest Processing Time",
     "SRPT": "SRPT - Shortest Remaining Processing Time",
 }
-
-# Đơn vị p/r/d trong dữ liệu được coi là GIỜ tính từ mốc này.
 MACHINE_LABEL = "Máy đơn"
+SOURCE_MANUAL, SOURCE_FILE = "Nhập thủ công", "Tải file CSV/Excel"
+
+# Streamlit mới (>= 1.49) dùng width="stretch"; bản cũ dùng use_container_width=True.
+_VERSION = tuple(int(x) for x in st.__version__.split(".")[:2] if x.isdigit())
+STRETCH = {"width": "stretch"} if _VERSION >= (1, 49) else {"use_container_width": True}
+
+# Bảng màu hệ thống của Apple, dùng cho biểu đồ Gantt.
+APPLE_COLORS = [
+    "#0A84FF", "#30D158", "#FF9F0A", "#BF5AF2", "#FF453A", "#64D2FF",
+    "#FFD60A", "#5E5CE6", "#AC8E68", "#63E6E2", "#FF375F", "#98989D",
+]
+FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif'
+
+
+# -----------------------------------------------------------------------------
+# 1. PHONG CÁCH GIAO DIỆN
+# -----------------------------------------------------------------------------
+STYLE = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--mute:#6e6e73;--line:#d2d2d7;--soft:#ececf0;
+      --blue:#0071e3;--blue-h:#0077ed;}
+
+/* Nền tảng và chữ */
+.stApp{background:var(--bg);color:var(--ink);}
+.stApp,.stApp p,.stApp label,.stApp li,.stApp button,.stApp input,.stApp textarea,.stApp table,
+.stApp div[data-testid="stMarkdownContainer"]{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.011em;}
+header[data-testid="stHeader"],footer,#MainMenu,[data-testid="stToolbar"],[data-testid="stDecoration"],
+[data-testid="stSidebar"],[data-testid="collapsedControl"],[data-testid="stSidebarCollapsedControl"]{display:none!important;}
+.block-container{max-width:1080px;padding:84px 24px 120px!important;}
+[data-testid="stVerticalBlock"]{gap:1.1rem;}
+
+/* Thanh điều hướng mờ kính */
+.nav{position:fixed;top:0;left:0;right:0;height:48px;z-index:1000;background:rgba(251,251,253,.8);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid rgba(0,0,0,.08);}
+.nav>div{max-width:1032px;height:100%;margin:0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;font-size:14px;}
+.nav b{font-weight:600;color:var(--ink);}
+.nav span{color:var(--mute);font-size:12px;letter-spacing:.02em;}
+
+/* Hero */
+.hero{text-align:center;padding:64px 0 36px;}
+.hero .t{font-size:clamp(40px,6.4vw,68px);line-height:1.05;font-weight:600;letter-spacing:-.03em;color:var(--ink);}
+.hero .s{font-size:clamp(17px,2.1vw,24px);line-height:1.4;color:var(--mute);margin:16px auto 0;max-width:660px;font-weight:400;}
+
+/* Thẻ nội dung */
+.card-anchor,div[data-testid="stElementContainer"]:has(.card-anchor),.element-container:has(.card-anchor){display:none!important;}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){
+  background:var(--card)!important;border:none!important;border-radius:28px!important;padding:40px 40px 32px!important;box-shadow:none!important;}
+.eyebrow{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.01em;margin-bottom:6px;}
+.sec-title{font-size:clamp(28px,3.6vw,40px);line-height:1.1;font-weight:600;letter-spacing:-.025em;color:var(--ink);}
+.sec-sub{font-size:17px;line-height:1.45;color:var(--mute);margin:10px 0 0;max-width:640px;}
+.hint{font-size:14px;line-height:1.5;color:var(--mute);}
+.hint b{color:var(--ink);font-weight:600;}
+.mini{font-size:14px;font-weight:600;color:var(--ink);margin:6px 0 2px;}
+
+/* Nút dạng viên thuốc */
+.stApp .stButton>button{border-radius:980px;border:none;box-shadow:none;background:#e8e8ed;color:var(--ink);
+  padding:10px 22px;min-height:44px;font-size:17px;font-weight:400;transition:background .2s ease;}
+.stApp .stButton>button:hover{background:#dcdce1;color:var(--ink);}
+.stApp .stButton>button p{color:inherit;font-size:17px;}
+.stApp .stButton>button[kind="primary"],.stApp .stButton>button[data-testid="stBaseButton-primary"]{
+  background:var(--blue);color:#fff;min-height:52px;font-size:19px;}
+.stApp .stButton>button[kind="primary"]:hover,.stApp .stButton>button[data-testid="stBaseButton-primary"]:hover{background:var(--blue-h);color:#fff;}
+
+/* Radio thành bộ chọn phân đoạn */
+.stApp div[role="radiogroup"]{background:#e8e8ed;border-radius:980px;padding:3px;display:inline-flex;gap:0;flex-wrap:nowrap;}
+.stApp div[role="radiogroup"] label{margin:0!important;padding:7px 20px;border-radius:980px;cursor:pointer;}
+.stApp div[role="radiogroup"] label>div:not(:has(p)){display:none!important;}
+.stApp div[role="radiogroup"] label p{font-size:15px;font-weight:500;white-space:nowrap;}
+.stApp div[role="radiogroup"] label:has(input:checked){background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.14);}
+
+/* Ô chọn luật */
+div[data-testid="stColumn"]:has(div[data-testid="stCheckbox"]),div[data-testid="column"]:has(div[data-testid="stCheckbox"]){
+  background:var(--bg);border-radius:20px;padding:18px 18px 12px;}
+.stApp div[data-testid="stCheckbox"] label p{font-size:19px;font-weight:600;letter-spacing:-.02em;}
+.rule-note{font-size:13px;line-height:1.35;color:var(--mute);margin:-2px 0 0 30px;}
+
+/* Bảng nhập liệu, tải file, chọn */
+div[data-testid="stDataFrame"],div[data-testid="stDataEditor"]{border-radius:16px;overflow:hidden;border:1px solid var(--line);}
+section[data-testid="stFileUploaderDropzone"],div[data-testid="stFileUploaderDropzone"]{background:var(--bg);border:1px dashed var(--line);border-radius:18px;}
+.stApp div[data-baseweb="select"]>div{border-radius:12px;background:#fff;border:1px solid var(--line);min-height:44px;}
+.stApp [data-testid="stCaptionContainer"],.stApp .stCaption{color:var(--mute);}
+
+/* Thông báo */
+.note{padding:14px 18px;border-radius:14px;font-size:15px;line-height:1.45;margin:4px 0;}
+.note.ok{background:#e6f6ea;color:#1c6b32;}
+.note.err{background:#fdecea;color:#b3261e;}
+.note.warn{background:#fff3df;color:#8a5300;}
+.note.info{background:#e8f1fc;color:#0b4f9c;}
+
+/* Bảng kết quả */
+.tbl-wrap{overflow-x:auto;margin:6px 0 2px;}
+.stApp table.tbl{width:100%;border-collapse:collapse;border:none;font-size:15px;font-variant-numeric:tabular-nums;}
+.stApp table.tbl th{font-size:12px;font-weight:600;color:var(--mute);text-align:left;padding:12px 16px;
+  border:none;border-bottom:1px solid var(--line);vertical-align:bottom;background:transparent;}
+.stApp table.tbl td{padding:15px 16px;border:none;border-bottom:1px solid var(--soft);color:var(--ink);background:transparent;}
+.stApp table.tbl tr:last-child td{border-bottom:none;}
+.stApp table.tbl .num{text-align:right;}
+.stApp table.tbl tr.hl td{font-weight:600;color:var(--blue);}
+.stApp table.dense td,.stApp table.dense th{padding:11px 12px;font-size:14px;}
+
+/* Luật tốt nhất */
+.best{background:var(--bg);border-radius:22px;padding:28px 32px;margin-top:6px;}
+.best .l{font-size:14px;font-weight:600;color:var(--mute);}
+.best .v{font-size:clamp(40px,6vw,64px);line-height:1.05;font-weight:600;letter-spacing:-.03em;margin:6px 0 4px;}
+.best .s{font-size:16px;color:var(--mute);}
+
+/* Tab, expander */
+.stApp button[data-baseweb="tab"]{font-size:16px;padding:10px 4px;margin-right:18px;color:var(--mute);}
+.stApp button[data-baseweb="tab"][aria-selected="true"]{color:var(--ink);font-weight:600;}
+.stApp div[data-baseweb="tab-highlight"]{background:var(--blue)!important;}
+.stApp div[data-testid="stExpander"] details{border:1px solid var(--line);border-radius:18px;background:#fff;}
+.stApp div[data-testid="stExpander"] summary p{font-size:17px;font-weight:500;}
+.order{font-size:15px;line-height:1.6;color:var(--ink);margin:4px 0 8px;}
+.order b{font-weight:600;}
+
+/* Diễn giải tiến trình */
+ul.steps{list-style:none;margin:6px 0 0;padding:0;}
+ul.steps li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--soft);}
+ul.steps li:last-child{border-bottom:none;}
+ul.steps b{font-size:17px;font-weight:600;display:block;}
+ul.steps em{font-style:normal;font-size:15px;color:var(--mute);}
+.pill{display:inline-block;padding:5px 14px;border-radius:980px;font-size:13px;font-weight:500;white-space:nowrap;}
+.pill.ok{background:#e6f6ea;color:#1c6b32;}
+.pill.late{background:#fff1de;color:#a24d00;}
+
+@media (max-width:640px){
+  div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){padding:26px 20px 22px!important;}
+  .stApp div[role="radiogroup"]{display:flex;}
+  .stApp div[role="radiogroup"] label{padding:7px 12px;}
+}
+</style>
+"""
+
+
+def esc(value) -> str:
+    return html.escape(str(value))
+
+
+def note(kind: str, text: str):
+    """Thông báo dạng thẻ mềm. kind: ok | err | warn | info."""
+    st.markdown(f'<div class="note {kind}">{esc(text)}</div>', unsafe_allow_html=True)
+
+
+def card_start():
+    """Đánh dấu container hiện tại là một thẻ trắng bo góc (xem CSS)."""
+    st.markdown('<span class="card-anchor"></span>', unsafe_allow_html=True)
+
+
+def section_head(eyebrow: str, title: str, sub: str = ""):
+    sub_html = f'<p class="sec-sub">{esc(sub)}</p>' if sub else ""
+    st.markdown(
+        f'<div class="eyebrow">{esc(eyebrow)}</div><div class="sec-title">{esc(title)}</div>{sub_html}',
+        unsafe_allow_html=True,
+    )
+
+
+def html_table(df: pd.DataFrame, formats: dict | None = None, highlight=None, dense: bool = False):
+    """Vẽ bảng chỉ đọc bằng HTML để đồng bộ phong cách; cột số căn phải."""
+    formats = formats or {}
+    numeric = [i > 0 and pd.api.types.is_numeric_dtype(df[c]) for i, c in enumerate(df.columns)]
+    head = "".join(
+        f'<th class="{"num" if num else ""}">{esc(c)}</th>' for c, num in zip(df.columns, numeric)
+    )
+    body = []
+    for rec in df.to_dict("records"):
+        cells = []
+        for (col, value), num in zip(rec.items(), numeric):
+            if col in formats:
+                text = formats[col].format(value)
+            elif isinstance(value, (float, np.floating)):
+                text = f"{value:.2f}"
+            else:
+                text = str(value)
+            cells.append(f'<td class="{"num" if num else ""}">{esc(text)}</td>')
+        row_cls = ' class="hl"' if highlight is not None and rec[df.columns[0]] == highlight else ""
+        body.append(f"<tr{row_cls}>{''.join(cells)}</tr>")
+    table_cls = "tbl dense" if dense else "tbl"
+    st.markdown(
+        f'<div class="tbl-wrap"><table class="{table_cls}"><thead><tr>{head}</tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
 
 
 # -----------------------------------------------------------------------------
 # 2. ĐỌC FILE NGƯỜI DÙNG TẢI LÊN
 # -----------------------------------------------------------------------------
-# Bản gốc backend.load_jobs_from_file() nhận ĐƯỜNG DẪN file trên ổ đĩa (dùng
-# cho Terminal). Trên web, Streamlit đưa file dưới dạng buffer trong bộ nhớ
-# (UploadedFile), nên cần một hàm đọc riêng - nhưng vẫn gọi lại đúng
-# backend.validate_jobs() để không lặp lại logic kiểm tra dữ liệu.
-# >>> Muốn hỗ trợ thêm định dạng file khác: thêm nhánh elif ở đây.
 def read_uploaded_jobs(uploaded_file) -> pd.DataFrame:
     name = uploaded_file.name.lower()
     if name.endswith(".csv"):
         raw_df = pd.read_csv(uploaded_file, dtype={"job_id": str}, keep_default_na=False)
     elif name.endswith((".xlsx", ".xls")):
-        raw_df = pd.read_excel(uploaded_file, sheet_name=0, dtype={"job_id": str},
-                                keep_default_na=False)
+        raw_df = pd.read_excel(uploaded_file, sheet_name=0, dtype={"job_id": str}, keep_default_na=False)
     else:
         raise ValueError("Chỉ hỗ trợ file CSV (.csv) hoặc Excel (.xlsx).")
-    # validate_jobs() là hàm CHUẨN của backend -> đảm bảo file tải lên tuân
-    # thủ đúng schema job_id, p, r, d, w như dữ liệu nhập tay/dữ liệu mẫu.
     return backend.validate_jobs(raw_df)
 
 
 # -----------------------------------------------------------------------------
-# 3. HÀM VẼ GANTT CHART (DẠNG TRỤC SỐ THUẦN TÚY)
+# 3. BIỂU ĐỒ GANTT
 # -----------------------------------------------------------------------------
 def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: str):
-    segments = schedule_result["segments"]
     seg_df = pd.DataFrame([
-        {
-            "Job": seg["job_id"],
-            "Start": float(seg["start"]),
-            "End": float(seg["end"]),
-            "Duration": float(seg["end"]) - float(seg["start"]),
-        }
-        for seg in segments
+        {"Job": seg["job_id"], "Start": float(seg["start"]), "End": float(seg["end"]),
+         "Duration": float(seg["end"]) - float(seg["start"])}
+        for seg in schedule_result["segments"]
     ])
-    
-    # Gắn thêm thông tin p, r, d, tardiness để hiện tooltip
     seg_df = seg_df.merge(
         result_df[["job_id", "p", "r", "d", "tardiness", "completion_time"]],
         left_on="Job", right_on="job_id", how="left",
@@ -106,128 +246,126 @@ def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: s
     seg_df["Machine"] = MACHINE_LABEL
     seg_df["Trạng thái"] = np.where(seg_df["tardiness"] > 0, "Trễ hạn", "Đúng hạn")
 
-    # Dùng px.bar để vẽ biểu đồ thanh ngang dạng trục số (0, 2, 4, 6...)
     fig = px.bar(
-        seg_df,
-        x="Duration",
-        y="Machine",
-        base="Start",
-        color="Job",
-        pattern_shape="Trạng thái",
-        pattern_shape_map={"Trễ hạn": "/", "Đúng hạn": ""},
-        orientation="h",
-        hover_data={
-            "Job": True, "Start": ":.2f", "End": ":.2f",
-            "Duration": False, "Machine": False,
-            "p": ":.2f", "r": ":.2f", "d": ":.2f", "tardiness": ":.2f",
-        },
-        title=f"Luật điều độ: {RULE_FULL_NAME.get(rule_key, rule_key)}",
+        seg_df, x="Duration", y="Machine", base="Start", color="Job",
+        pattern_shape="Trạng thái", pattern_shape_map={"Trễ hạn": "/", "Đúng hạn": ""},
+        orientation="h", color_discrete_sequence=APPLE_COLORS,
+        hover_data={"Job": True, "Start": ":.2f", "End": ":.2f", "Duration": False, "Machine": False,
+                    "p": ":.2f", "r": ":.2f", "d": ":.2f", "tardiness": ":.2f"},
     )
-    
-    # Tinh chỉnh lại trục X hiển thị dạng số giờ rõ ràng
-    fig.update_xaxes(title="Thời gian (Giờ)", tickformat=".1f")
-    fig.update_yaxes(title="")
-    fig.update_layout(height=260, legend_title="Job", font=dict(size=13))
-    
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=3)
+    fig.update_xaxes(title="Thời gian (giờ)", tickformat="~g", gridcolor="#ececf0", zeroline=False,
+                     linecolor="#d2d2d7", rangemode="tozero")
+    fig.update_yaxes(title="", showgrid=False)
+    fig.update_layout(
+        height=280, bargap=0.25, legend_title_text="",
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="left", x=0),
+        font=dict(family=FONT_STACK, size=14, color="#1d1d1f"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#ffffff",
+        margin=dict(l=8, r=8, t=48, b=8),
+        hoverlabel=dict(bgcolor="#ffffff", font=dict(family=FONT_STACK, color="#1d1d1f")),
+    )
     return fig
 
-# -----------------------------------------------------------------------------
-# 4. GIAO DIỆN: SIDEBAR
-# -----------------------------------------------------------------------------
-def sidebar_ui():
-    st.sidebar.header("⚙️ Cấu hình điều độ")
 
-    st.sidebar.subheader("1️⃣ Nguồn dữ liệu công việc")
-    input_method = st.sidebar.radio(
-        "Chọn cách nhập dữ liệu",
-        ["📊 Nhập thủ công", "📁 Tải file CSV/Excel"],
-        label_visibility="collapsed",
+# -----------------------------------------------------------------------------
+# 4. GIAO DIỆN: ĐẦU TRANG
+# -----------------------------------------------------------------------------
+def header_ui():
+    st.markdown(
+        '<div class="nav"><div><b>Điều độ máy đơn</b><span>FCFS · SPT · EDD · LPT · SRPT</span></div></div>'
+        '<div class="hero"><div class="t">Điều độ máy đơn.</div>'
+        '<div class="s">So sánh năm luật điều độ trên cùng một bộ công việc, '
+        'từ thứ tự gia công đến biểu đồ Gantt.</div></div>',
+        unsafe_allow_html=True,
     )
 
-    if input_method == "📁 Tải file CSV/Excel":
-        uploaded_file = st.sidebar.file_uploader("Chọn file (.csv, .xlsx)",
-                                                   type=["csv", "xlsx", "xls"])
-        if uploaded_file is not None:
-            sig = f"{uploaded_file.name}-{uploaded_file.size}"
-            if sig != st.session_state.get("last_uploaded_sig"):
-                try:
-                    validated_df = read_uploaded_jobs(uploaded_file)
-                    st.session_state.df = validated_df
-                    st.session_state.editor_version += 1
-                    st.session_state.last_uploaded_sig = sig
-                    st.sidebar.success(f"✅ Đã tải {len(validated_df)} công việc hợp lệ.")
-                except ValueError as exc:
-                    st.sidebar.error(f"❌ File không hợp lệ: {exc}")
-                except Exception as exc:
-                    st.sidebar.error(f"❌ Lỗi khi đọc file: {exc}")
 
-        with st.sidebar.expander("ℹ️ Cấu trúc file yêu cầu"):
-            st.write("**Cột bắt buộc:** job_id, p, r, d")
-            st.write("**Cột tùy chọn:** w (trọng số, mặc định = 1 nếu để trống)")
-            st.caption("p > 0 ; r, d, w ≥ 0 ; job_id không được trùng.")
+# -----------------------------------------------------------------------------
+# 5. GIAO DIỆN: DỮ LIỆU CÔNG VIỆC (nguồn dữ liệu + bảng nhập liệu)
+# -----------------------------------------------------------------------------
+def data_section_ui() -> pd.DataFrame:
+    with st.container(border=True):
+        card_start()
+        section_head("Bước 1", "Dữ liệu công việc.", "Chọn nguồn dữ liệu, sau đó kiểm tra hoặc chỉnh sửa trực tiếp trong bảng.")
 
-    if st.sidebar.button("🔄 Reset"):
-        st.session_state.df = backend.validate_jobs(backend.SAMPLE_JOBS)
-        st.session_state.editor_version += 1
-        st.session_state.last_uploaded_sig = None
-        st.session_state.results = {}
-        st.rerun()
+        col_source, col_reset = st.columns([4, 1])
+        with col_source:
+            input_method = st.radio("Nguồn dữ liệu công việc", [SOURCE_MANUAL, SOURCE_FILE],
+                                    horizontal=True, label_visibility="collapsed")
+        with col_reset:
+            if st.button("Reset", **STRETCH):
+                st.session_state.df = backend.validate_jobs(backend.SAMPLE_JOBS)
+                st.session_state.editor_version += 1
+                st.session_state.last_uploaded_sig = None
+                st.session_state.results = {}
+                st.rerun()
+
+        if input_method == SOURCE_FILE:
+            uploaded_file = st.file_uploader("Chọn file (.csv, .xlsx)", type=["csv", "xlsx", "xls"])
+            if uploaded_file is not None:
+                sig = f"{uploaded_file.name}-{uploaded_file.size}"
+                if sig != st.session_state.get("last_uploaded_sig"):
+                    try:
+                        validated_df = read_uploaded_jobs(uploaded_file)
+                        st.session_state.df = validated_df
+                        st.session_state.editor_version += 1
+                        st.session_state.last_uploaded_sig = sig
+                        note("ok", f"Đã tải {len(validated_df)} công việc hợp lệ.")
+                    except ValueError as exc:
+                        note("err", f"File không hợp lệ: {exc}")
+                    except Exception as exc:
+                        note("err", f"Lỗi khi đọc file: {exc}")
+            st.markdown(
+                '<div class="hint"><b>Cột bắt buộc:</b> job_id, p, r, d. '
+                '<b>Cột tùy chọn:</b> w (trọng số, mặc định 1 nếu để trống). '
+                'Điều kiện: p &gt; 0; r, d, w ≥ 0; job_id không được trùng.</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.caption("Nhấn dấu + cuối bảng để thêm dòng, chọn dòng rồi nhấn Delete để xóa.")
+        return st.data_editor(
+            st.session_state.df,
+            num_rows="dynamic",
+            key=f"data_editor_{st.session_state.editor_version}",
+            column_config={
+                "job_id": st.column_config.TextColumn("J (công việc)", required=True),
+                "p": st.column_config.NumberColumn("p (thời gian gia công)", min_value=0.01, step=0.5, required=True),
+                "r": st.column_config.NumberColumn("r (thời gian đến)", min_value=0.0, step=0.5, required=True),
+                "d": st.column_config.NumberColumn("d (thời gian tới hạn)", min_value=0.0, step=0.5, required=True),
+                "w": st.column_config.NumberColumn("w (trọng số)", min_value=0.0, step=1.0),
+            },
+            **STRETCH,
+        )
 
 
-    st.sidebar.divider()
-    st.sidebar.subheader("2️⃣ Chọn luật điều độ")
-    
-    # Hàm tự động cập nhật trạng thái cho tất cả các checkbox con khi bấm "Chọn tất cả"
+# -----------------------------------------------------------------------------
+# 6. GIAO DIỆN: CHỌN LUẬT VÀ CHẠY
+# -----------------------------------------------------------------------------
+def rules_section_ui():
     def toggle_all_rules():
-        val = st.session_state.get("select_all_master", True)
         for key in SCHEDULERS:
-            st.session_state[f"chk_{key}"] = val
-    
-    # Checkbox tổng "Chọn tất cả" ở trên cùng
-    st.sidebar.checkbox("Chọn tất cả", value=True, key="select_all_master", on_change=toggle_all_rules)
-    
-    # Đảm bảo các checkbox con có giá trị khởi tạo trong session_state
+            st.session_state[f"chk_{key}"] = st.session_state["select_all_master"]
+
+    st.session_state.setdefault("select_all_master", True)
     for key in SCHEDULERS:
-        chk_key = f"chk_{key}"
-        if chk_key not in st.session_state:
-            st.session_state[chk_key] = True
-    
-    # Tạo danh sách các checkbox cho từng luật
-    selected_rules = [
-        key for key in SCHEDULERS
-        if st.sidebar.checkbox(RULE_FULL_NAME[key], key=f"chk_{key}")
-    ]
+        st.session_state.setdefault(f"chk_{key}", True)
 
+    with st.container(border=True):
+        card_start()
+        section_head("Bước 2", "Luật điều độ.", "Chọn một hoặc nhiều luật để so sánh.")
+        st.checkbox("Chọn tất cả", key="select_all_master", on_change=toggle_all_rules)
 
-    st.sidebar.divider()
-    run_clicked = st.sidebar.button("🚀 Điều độ", type="primary",
-                                     use_container_width=True)
+        selected_rules = []
+        for col, key in zip(st.columns(len(SCHEDULERS)), SCHEDULERS):
+            with col:
+                if st.checkbox(key, key=f"chk_{key}"):
+                    selected_rules.append(key)
+                st.markdown(f'<div class="rule-note">{esc(RULE_FULL_NAME[key].split(" - ", 1)[-1])}</div>',
+                            unsafe_allow_html=True)
+
+        run_clicked = st.button("Điều độ", type="primary", **STRETCH)
     return selected_rules, run_clicked
-
-
-# -----------------------------------------------------------------------------
-# 6. GIAO DIỆN: BẢNG NHẬP LIỆU
-# -----------------------------------------------------------------------------
-def input_section_ui() -> pd.DataFrame:
-    st.subheader("Dữ liệu công việc")
-    st.caption("Nhấn dấu `+` cuối bảng để thêm dòng, chọn dòng rồi nhấn Delete để xóa.")
-    edited_df = st.data_editor(
-        st.session_state.df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key=f"data_editor_{st.session_state.editor_version}",
-        column_config={
-            "job_id": st.column_config.TextColumn("J (công việc)", required=True), 
-            "p": st.column_config.NumberColumn("p (thời gian gia công)", min_value=0.01,
-                                               step=0.5, required=True),
-            "r": st.column_config.NumberColumn("r (thời gian đến)", min_value=0.0, step=0.5,
-                                               required=True),
-            "d": st.column_config.NumberColumn("d (thời gian tới hạn)", min_value=0.0, step=0.5,
-                                               required=True),
-            "w": st.column_config.NumberColumn("w (trọng số)", min_value=0.0, step=1.0),
-        },
-    )
-    return edited_df
 
 
 # -----------------------------------------------------------------------------
@@ -236,85 +374,78 @@ def input_section_ui() -> pd.DataFrame:
 def results_section_ui():
     if not st.session_state.results:
         return
+    standard_df = pd.DataFrame(
+        [res["metrics"] for res in st.session_state.results.values()]
+    ).reindex(columns=backend.COMPARISON_COLUMNS)
+    best_row = standard_df.sort_values("Tổng thời gian hoàn thành", kind="stable").iloc[0]
 
-    # ---- Bảng 1: KPI CHUẨN -----
-    st.subheader("📊 Tổng hợp các thông số")
-    metrics_rows = [res["metrics"] for res in st.session_state.results.values()]
-    standard_df = pd.DataFrame(metrics_rows).reindex(columns=backend.COMPARISON_COLUMNS)
-    st.dataframe(
-        standard_df.style.format({
+    with st.container(border=True):
+        card_start()
+        section_head("Kết quả", "Tổng hợp các thông số.")
+        html_table(standard_df, formats={
             "Tổng thời gian hoàn thành": "{:.2f}",
             "Độ hữu dụng": "{:.2%}",
             "Số lượng công việc trung bình trong hệ thống": "{:.2f}",
             "Thời gian trung bình trong hệ thống": "{:.2f}",
-        }),
-        use_container_width=True, hide_index=True,
-    )
+        }, highlight=best_row["Luật"])
 
-    # ---- Đánh giá tự động dựa trên Bảng KPI chuẩn ---
-    # Sắp xếp theo Tổng thời gian hoàn thành tăng dần (nhỏ nhất là tốt nhất)
-    sorted_standard_df = standard_df.sort_values(by="Tổng thời gian hoàn thành", ascending=True).reset_index(drop=True)
-    best_row = sorted_standard_df.iloc[0]
+        st.markdown(
+            f'<div class="best"><div class="l">Luật điều độ tốt nhất</div>'
+            f'<div class="v">{esc(best_row["Luật"])}</div>'
+            f'<div class="s">Tổng thời gian hoàn thành nhỏ nhất: {best_row["Tổng thời gian hoàn thành"]:.2f}</div></div>',
+            unsafe_allow_html=True,
+        )
 
-    st.success(f"🏆 **Luật điều độ tốt nhất: {best_row['Luật']}**")
-   
+        with st.expander("Xem chi tiết từng luật đã chạy"):
+            rule_keys = list(st.session_state.results.keys())
+            for tab, rule_key in zip(st.tabs(rule_keys), rule_keys):
+                with tab:
+                    res = st.session_state.results[rule_key]
+                    st.markdown(f'<div class="mini">{esc(RULE_FULL_NAME[rule_key])}</div>'
+                                f'<div class="order"><b>Thứ tự điều độ:</b> {esc(res["machine_order_text"])}</div>',
+                                unsafe_allow_html=True)
+                    html_table(res["result_df"].rename(columns=backend.DISPLAY_COLUMNS), dense=True)
+                    if rule_key == "SRPT":
+                        st.markdown('<div class="mini">Bảng thời gian chi tiết của từng công việc (SRPT)</div>',
+                                    unsafe_allow_html=True)
+                        html_table(backend.calculate_srpt_job_times(res["result_df"]), dense=True)
 
-    # ---- Chi tiết từng luật -------
-    with st.expander("🔍 Xem chi tiết từng luật đã chạy"):
-        tab_labels = list(st.session_state.results.keys())
-        tabs = st.tabs([RULE_FULL_NAME[k] for k in tab_labels])
-        for tab, rule_key in zip(tabs, tab_labels):
-            with tab:
-                res = st.session_state.results[rule_key]
-                st.markdown(f"**Thứ tự điều độ:** {res['machine_order_text']}")
-                display_df = res["result_df"].rename(columns=backend.DISPLAY_COLUMNS)
-                st.dataframe(display_df.style.format(precision=2),
-                             use_container_width=True, hide_index=True)
-                if rule_key == "SRPT":
-                    job_times = backend.calculate_srpt_job_times(res["result_df"])
-                    st.markdown("**Bảng thời gian chi tiết của từng công việc (SRPT):**")
-                    st.dataframe(
-                        job_times.style.format(precision=2),
-                        use_container_width=True, 
-                        hide_index=True
-                    )
 
 # -----------------------------------------------------------------------------
-# 8. GIAO DIỆN: GANTT CHART
+# 8. GIAO DIỆN: GANTT
 # -----------------------------------------------------------------------------
 def gantt_section_ui():
     if not st.session_state.results:
         return
-    st.subheader("📅 Biểu đồ Gantt & Tiến trình")
-    
-    rule_options = list(st.session_state.results.keys())
-    selected_rule = st.selectbox(
-        "Chọn Luật điều độ:",
-        options=rule_options,
-        format_func=lambda k: RULE_FULL_NAME.get(k, k),
-        key="gantt_rule_select"
-    )
-    
-    res = st.session_state.results[selected_rule]
-    fig = plot_gantt_chart(res["schedule_result"], res["result_df"], selected_rule)
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    st.markdown("### 📝 Diễn giải tiến trình gia công:")
-    
-    df_res = res["result_df"]
-    for _, row in df_res.iterrows():
-        job = row.get("job_id", "Công việc")
-        start = row.get("start_time", 0)
-        completion = row.get("completion_time", 0)
-        tardiness = row.get("tardiness", 0)
-        
-        status_text = "✅ **Đúng hạn**" if tardiness == 0 else f"⚠️ **Trễ hạn** ({tardiness:.1f}h)"
-        st.write(f"- **{job}**: Được gia công từ giờ thứ **{start:.1f}** đến giờ thứ **{completion:.1f}** — {status_text}")
+    with st.container(border=True):
+        card_start()
+        section_head("Tiến trình", "Biểu đồ Gantt.")
+        selected_rule = st.selectbox(
+            "Chọn luật điều độ",
+            options=list(st.session_state.results.keys()),
+            format_func=lambda k: RULE_FULL_NAME.get(k, k),
+            key="gantt_rule_select",
+        )
+        res = st.session_state.results[selected_rule]
+        st.plotly_chart(plot_gantt_chart(res["schedule_result"], res["result_df"], selected_rule),
+                        config={"displayModeBar": False}, **STRETCH)
+
+        st.markdown('<div class="mini">Diễn giải tiến trình gia công</div>', unsafe_allow_html=True)
+        items = []
+        for row in res["result_df"].to_dict("records"):
+            late = row["tardiness"] > 0
+            pill = (f'<span class="pill late">Trễ hạn ({row["tardiness"]:.1f}h)</span>' if late
+                    else '<span class="pill ok">Đúng hạn</span>')
+            items.append(
+                f'<li><div><b>{esc(row["job_id"])}</b>'
+                f'<em>Gia công từ giờ thứ {row["start_time"]:.1f} đến giờ thứ {row["completion_time"]:.1f}</em></div>'
+                f'{pill}</li>'
+            )
+        st.markdown(f'<ul class="steps">{"".join(items)}</ul>', unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
-# 9. main() - ĐIỀU PHỐI TOÀN BỘ LUỒNG CHẠY
+# 9. main() - ĐIỀU PHỐI LUỒNG CHẠY
 # -----------------------------------------------------------------------------
 def init_session_state():
     if "df" not in st.session_state:
@@ -322,55 +453,51 @@ def init_session_state():
     if "editor_version" not in st.session_state:
         st.session_state.editor_version = 0
     if "results" not in st.session_state:
-        st.session_state.results = {}  # {rule_key: {schedule_result, result_df, metrics, extra_kpis, machine_order_text}}
+        st.session_state.results = {}  # {rule_key: {schedule_result, result_df, metrics, machine_order_text}}
+
+
+def run_schedulers(validated_df: pd.DataFrame, selected_rules: list) -> dict:
+    results = {}
+    for rule_key in selected_rules:
+        schedule_result = SCHEDULERS[rule_key](validated_df)
+        result_df = backend.calculate_job_results(validated_df, schedule_result)
+        results[rule_key] = {
+            "schedule_result": schedule_result,
+            "result_df": result_df,
+            "metrics": backend.calculate_metrics(result_df, rule_key),
+            "machine_order_text": backend.format_machine_order(schedule_result),
+        }
+    return results
 
 
 def main():
     init_session_state()
+    st.markdown(STYLE, unsafe_allow_html=True)
+    header_ui()
 
-    st.title("🏭 Điều độ máy đơn")
-
-    selected_rules, run_clicked = sidebar_ui()
-    current_df = input_section_ui()
-    st.divider()
+    current_df = data_section_ui()
+    selected_rules, run_clicked = rules_section_ui()
 
     if run_clicked:
         if not selected_rules:
-            st.warning("⚠️ Vui lòng chọn ít nhất một luật điều độ ở thanh bên trước khi chạy.")
+            note("warn", "Vui lòng chọn ít nhất một luật điều độ trước khi chạy.")
         else:
             try:
                 validated_df = backend.validate_jobs(current_df)
             except ValueError as exc:
-                st.error(f"❌ Dữ liệu không hợp lệ: {exc}")
-                validated_df = None
-
-            if validated_df is not None:
+                note("err", f"Dữ liệu không hợp lệ: {exc}")
+            else:
                 st.session_state.df = validated_df
-                results = {}
                 with st.spinner("Đang tính toán lịch trình..."):
-                    for rule_key in selected_rules:
-                        scheduler_fn = SCHEDULERS[rule_key]
-                        schedule_result = scheduler_fn(validated_df)
-                        result_df = backend.calculate_job_results(validated_df, schedule_result)
-                        metrics = backend.calculate_metrics(result_df, rule_key)
-                        results[rule_key] = {
-                            "schedule_result": schedule_result,
-                            "result_df": result_df,
-                            "metrics": metrics,
-                            "machine_order_text": backend.format_machine_order(schedule_result),
-                        }
-                st.session_state.results = results
-                st.success(f"✅ Đã chạy xong {len(selected_rules)} luật cho {len(validated_df)} công việc.")
+                    st.session_state.results = run_schedulers(validated_df, selected_rules)
+                note("ok", f"Đã chạy xong {len(selected_rules)} luật cho {len(validated_df)} công việc.")
 
     results_section_ui()
-    st.divider()
     gantt_section_ui()
 
     if not st.session_state.results:
-        st.info(
-            "👈 Kiểm tra/sửa dữ liệu công việc, chọn ít nhất một luật điều độ ở thanh bên, "
-            "sau đó nhấn **'🚀 Điều độ'** để xem kết quả."
-        )
+        note("info", "Kiểm tra hoặc sửa dữ liệu công việc, chọn ít nhất một luật điều độ, "
+                     "sau đó nhấn Điều độ để xem kết quả.")
 
 
 if __name__ == "__main__":
