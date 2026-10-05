@@ -359,12 +359,18 @@ def data_section_ui() -> pd.DataFrame:
                 unsafe_allow_html=True,
             )
 
-        st.caption("Nhấn dấu + cuối bảng để thêm dòng. Để xóa, tích chọn ô đầu dòng rồi nhấn biểu tượng thùng rác ở góc trên bên phải bảng.")
-        edited_df = st.data_editor(
-            st.session_state.df,
-            num_rows="dynamic",
+        st.caption("Nhấn Thêm dòng để thêm công việc mới. Để xóa, tích ô Chọn ở đầu dòng rồi nhấn biểu tượng thùng rác.")
+
+        # Cột "Chọn" chỉ dùng để đánh dấu dòng cần xóa, không đi vào dữ liệu điều độ.
+        display_df = st.session_state.df.reset_index(drop=True).copy()
+        display_df.insert(0, "Chọn", False)
+        edited = st.data_editor(
+            display_df,
+            num_rows="fixed",
+            hide_index=True,
             key=f"data_editor_{st.session_state.editor_version}",
             column_config={
+                "Chọn": st.column_config.CheckboxColumn("Chọn", width="small"),
                 "job_id": st.column_config.TextColumn("J (công việc)", required=True),
                 "p": st.column_config.NumberColumn("p (thời gian gia công)", min_value=0.01, step=0.5, required=True),
                 "r": st.column_config.NumberColumn("r (thời gian đến)", min_value=0.0, step=0.5, required=True),
@@ -373,8 +379,36 @@ def data_section_ui() -> pd.DataFrame:
             },
             **STRETCH,
         )
+        current_df = edited.drop(columns="Chọn").reset_index(drop=True)
 
-        return edited_df
+        icon_kw = {"icon": ":material/delete:"} if _VERSION >= (1, 40) else {}
+        col_add, col_del, _ = st.columns([1.3, 2.2, 4])
+        with col_add:
+            add_clicked = st.button("Thêm dòng", key="add_row", **STRETCH)
+        with col_del:
+            del_clicked = st.button("Xóa dòng đã chọn", key="delete_rows", **icon_kw, **STRETCH)
+
+        if add_clicked:
+            used = {str(j) for j in current_df["job_id"].dropna()}
+            n = len(current_df) + 1
+            while f"J{n}" in used:
+                n += 1
+            defaults = {"job_id": f"J{n}", "p": 1.0, "r": 0.0, "d": 1.0, "w": 1.0}
+            new_row = {c: defaults.get(c) for c in current_df.columns}
+            st.session_state.df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
+            st.session_state.editor_version += 1
+            st.session_state.results = {}
+            st.rerun()
+        if del_clicked:
+            keep = ~edited["Chọn"].fillna(False).astype(bool).to_numpy()
+            if keep.all():
+                note("warn", "Chưa chọn dòng nào để xóa.")
+            else:
+                st.session_state.df = current_df[keep].reset_index(drop=True)
+                st.session_state.editor_version += 1
+                st.session_state.results = {}
+                st.rerun()
+        return current_df
 
 
 # -----------------------------------------------------------------------------
