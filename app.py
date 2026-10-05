@@ -27,6 +27,13 @@ RULE_FULL_NAME = {
     "LPT": "LPT - Longest Processing Time",
     "SRPT": "SRPT - Shortest Remaining Processing Time",
 }
+RULE_DESC = {
+    "FCFS": "Ưu tiên công việc đến trước",
+    "SPT": "Ưu tiên công việc có thời gian gia công ngắn nhất",
+    "EDD": "Ưu tiên công việc có thời hạn hoàn thành sớm nhất",
+    "LPT": "Ưu tiên công việc có thời gian gia công dài nhất",
+    "SRPT": "Ưu tiên công việc có thời gian gia công còn lại ngắn nhất (cho phép ngắt)",
+}
 MACHINE_LABEL = "Máy đơn"
 SOURCE_MANUAL, SOURCE_FILE = "Nhập thủ công", "Tải file CSV/Excel"
 
@@ -48,7 +55,7 @@ FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvet
 STYLE = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root{--pad:40px;--bg:#f5f5f7;--card:#fff;--ink:#000;--mute:#1d1d1f;--line:#d2d2d7;--soft:#ececf0;
+:root{--pad:0px;--bg:#f5f5f7;--card:#fff;--ink:#000;--mute:#1d1d1f;--line:#d2d2d7;--soft:#ececf0;
       --red:#d70015;--red-on-dark:#ff453a;}
 
 /* Nền tảng và chữ: ép chữ đen trên nền sáng */
@@ -129,6 +136,9 @@ div[data-baseweb="popover"] *{color:#000!important;background-color:#fff;}
 div[data-baseweb="popover"] li:hover{background-color:#f0f0f3!important;}
 .stApp [data-testid="stCaptionContainer"],.stApp .stCaption{color:#000;}
 
+/* Thanh công cụ của bảng nhập liệu (biểu tượng thùng rác) luôn hiển thị */
+[data-testid="stElementToolbar"]{opacity:1!important;visibility:visible!important;}
+
 /* Thông báo: chữ đen trên nền sáng; lỗi/cảnh báo dùng chữ đỏ để nhấn mạnh */
 .note{padding:16px 20px;border-radius:14px;font-size:15px;line-height:1.5;margin:8px 0;color:#000;}
 .note.ok{background:#e6f6ea;color:#000;}
@@ -179,7 +189,6 @@ ul.steps em{font-style:normal;font-size:15px;color:#000;}
   div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){padding:28px 20px 26px!important;}
   .stApp div[role="radiogroup"]{display:flex;}
   .stApp div[role="radiogroup"] label{padding:7px 12px;}
-  :root{--pad:20px;}
   .hero{flex-direction:column;align-items:flex-start;}
   .hero .s{text-align:left;}
 }
@@ -280,11 +289,13 @@ def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: s
                     "p": ":.2f", "r": ":.2f", "d": ":.2f", "tardiness": ":.2f"},
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=3)
-    fig.update_xaxes(title="Thời gian (giờ)", tickformat="~g", gridcolor="#ececf0", zeroline=False,
+    time_points = sorted(set(seg_df["Start"].round(6)) | set(seg_df["End"].round(6)))
+    fig.update_xaxes(title="", tickmode="array", tickvals=time_points,
+                     ticktext=[f"{t:g}" for t in time_points], gridcolor="#ececf0", zeroline=False,
                      linecolor="#d2d2d7", rangemode="tozero")
-    fig.update_yaxes(title="", showgrid=False)
+    fig.update_yaxes(title="", showticklabels=False, showgrid=False)
     fig.update_layout(
-        height=300, bargap=0.25, legend_title_text="",
+        height=240, bargap=0.25, legend_title_text="",
         legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="left", x=0),
         font=dict(family=FONT_STACK, size=14, color="#000000"),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#ffffff",
@@ -348,7 +359,7 @@ def data_section_ui() -> pd.DataFrame:
                 unsafe_allow_html=True,
             )
 
-        st.caption("Nhấn dấu + cuối bảng để thêm dòng. Để xóa, chọn công việc ở ô bên dưới rồi nhấn Xóa.")
+        st.caption("Nhấn dấu + cuối bảng để thêm dòng. Để xóa, tích chọn ô đầu dòng rồi nhấn biểu tượng thùng rác ở góc trên bên phải bảng.")
         edited_df = st.data_editor(
             st.session_state.df,
             num_rows="dynamic",
@@ -363,19 +374,6 @@ def data_section_ui() -> pd.DataFrame:
             **STRETCH,
         )
 
-        job_ids = [str(j) for j in edited_df["job_id"].dropna()]
-        col_pick, col_del = st.columns([4, 1])
-        with col_pick:
-            to_delete = st.multiselect("Chọn công việc cần xóa", options=job_ids,
-                                       placeholder="Chọn một hoặc nhiều công việc")
-        with col_del:
-            st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
-            if st.button("Xóa", key="delete_jobs", **STRETCH) and to_delete:
-                keep = ~edited_df["job_id"].astype(str).isin(to_delete)
-                st.session_state.df = edited_df[keep].reset_index(drop=True)
-                st.session_state.editor_version += 1
-                st.session_state.results = {}
-                st.rerun()
         return edited_df
 
 
@@ -383,26 +381,46 @@ def data_section_ui() -> pd.DataFrame:
 # 6. GIAO DIỆN: CHỌN LUẬT VÀ CHẠY
 # -----------------------------------------------------------------------------
 def rules_section_ui():
-    def toggle_all_rules():
-        for key in SCHEDULERS:
-            st.session_state[f"chk_{key}"] = st.session_state["select_all_master"]
-
-    st.session_state.setdefault("select_all_master", True)
-    for key in SCHEDULERS:
-        st.session_state.setdefault(f"chk_{key}", True)
+    st.session_state.setdefault("rules_version", 0)
+    st.session_state.setdefault("rules_default", True)
 
     with st.container(border=True):
         card_start()
-        section_head("", "Luật điều độ.", "Chọn một hoặc nhiều luật để so sánh.")
-        st.checkbox("Chọn tất cả", key="select_all_master", on_change=toggle_all_rules)
+        section_head("", "Luật điều độ.", "Tích chọn một hoặc nhiều luật trong bảng để so sánh.")
 
-        selected_rules = []
-        for col, key in zip(st.columns(len(SCHEDULERS)), SCHEDULERS):
-            with col:
-                if st.checkbox(key, key=f"chk_{key}"):
-                    selected_rules.append(key)
-                st.markdown(f'<div class="rule-note">{esc(RULE_FULL_NAME[key].split(" - ", 1)[-1])}</div>',
-                            unsafe_allow_html=True)
+        col_all, col_none, _ = st.columns([1.3, 1.3, 4])
+        with col_all:
+            if st.button("Chọn tất cả", key="rules_all", **STRETCH):
+                st.session_state.rules_default = True
+                st.session_state.rules_version += 1
+                st.rerun()
+        with col_none:
+            if st.button("Bỏ chọn tất cả", key="rules_none", **STRETCH):
+                st.session_state.rules_default = False
+                st.session_state.rules_version += 1
+                st.rerun()
+
+        rules_df = pd.DataFrame({
+            "Chọn": [st.session_state.rules_default] * len(SCHEDULERS),
+            "Luật": list(SCHEDULERS.keys()),
+            "Tên đầy đủ": [RULE_FULL_NAME[k].split(" - ", 1)[-1] for k in SCHEDULERS],
+            "Nguyên tắc ưu tiên": [RULE_DESC.get(k, "") for k in SCHEDULERS],
+        })
+        edited_rules = st.data_editor(
+            rules_df,
+            hide_index=True,
+            num_rows="fixed",
+            key=f"rules_editor_{st.session_state.rules_version}",
+            disabled=["Luật", "Tên đầy đủ", "Nguyên tắc ưu tiên"],
+            column_config={
+                "Chọn": st.column_config.CheckboxColumn("Chọn", width="small"),
+                "Luật": st.column_config.TextColumn("Luật", width="small"),
+                "Tên đầy đủ": st.column_config.TextColumn("Tên đầy đủ", width="medium"),
+                "Nguyên tắc ưu tiên": st.column_config.TextColumn("Nguyên tắc ưu tiên", width="large"),
+            },
+            **STRETCH,
+        )
+        selected_rules = edited_rules.loc[edited_rules["Chọn"], "Luật"].tolist()
 
         run_clicked = st.button("Điều độ", type="primary", **STRETCH)
     return selected_rules, run_clicked
