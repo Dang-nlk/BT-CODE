@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import html
+import re
 
 import numpy as np
 import pandas as pd
@@ -47,12 +48,12 @@ FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvet
 STYLE = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root{--bg:#f5f5f7;--card:#fff;--ink:#000;--mute:#1d1d1f;--line:#d2d2d7;--soft:#ececf0;
+:root{--pad:40px;--bg:#f5f5f7;--card:#fff;--ink:#000;--mute:#1d1d1f;--line:#d2d2d7;--soft:#ececf0;
       --red:#d70015;--red-on-dark:#ff453a;}
 
 /* Nền tảng và chữ: ép chữ đen trên nền sáng */
 .stApp{background:var(--bg);color:var(--ink);}
-.stApp,.stApp p,.stApp label,.stApp li,.stApp span,.stApp button,.stApp input,.stApp textarea,.stApp table,
+.stApp,.stApp p,.stApp label,.stApp li,.stApp button,.stApp input,.stApp textarea,.stApp table,
 .stApp h1,.stApp h2,.stApp h3,.stApp div[data-testid="stMarkdownContainer"]{
   color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
@@ -63,20 +64,25 @@ header[data-testid="stHeader"],footer,#MainMenu,[data-testid="stToolbar"],[data-
 /* Tăng khoảng cách giữa các hàng/khối */
 [data-testid="stVerticalBlock"]{gap:2rem;}
 
+/* Giữ nguyên font biểu tượng của Streamlit (sửa lỗi chữ arrow_down chồng lên tiêu đề expander) */
+.stApp [data-testid="stIconMaterial"],.stApp span[class*="material"]{
+  font-family:"Material Symbols Rounded","Material Symbols Outlined"!important;letter-spacing:normal!important;}
+.stApp span{color:#000;}
+
 /* Thanh điều hướng: trái = tên môn, phải = nhóm */
 .nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:1000;background:rgba(255,255,255,.92);
   -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
   border-bottom:1px solid rgba(0,0,0,.12);}
-.nav>div{max-width:1032px;height:100%;margin:0 auto;display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;font-size:15px;}
+.nav>div{box-sizing:border-box;max-width:1080px;height:100%;margin:0 auto;display:flex;align-items:center;
+  justify-content:space-between;padding:0 calc(24px + var(--pad));font-size:15px;}
 .nav b{font-weight:600;color:#000;}
 .nav span{color:#000;font-size:14px;font-weight:500;}
 
 /* Hero: mô tả bên trái, tiêu đề bên phải, cùng một hàng */
 .hero{display:flex;align-items:baseline;justify-content:space-between;gap:24px;flex-wrap:wrap;
-  padding:48px 0 28px;}
-.hero .s{font-size:clamp(17px,2.1vw,24px);line-height:1.3;color:#000;font-weight:500;text-align:left;}
-.hero .t{font-size:clamp(36px,5.4vw,60px);line-height:1.05;font-weight:600;letter-spacing:-.03em;color:#000;text-align:right;}
+  padding:48px var(--pad) 28px;}
+.hero .t{font-size:clamp(36px,5.4vw,60px);line-height:1.05;font-weight:600;letter-spacing:-.03em;color:#000;text-align:left;}
+.hero .s{font-size:clamp(17px,2.1vw,24px);line-height:1.3;color:#000;font-weight:500;text-align:right;}
 
 /* Thẻ nội dung */
 .card-anchor,div[data-testid="stElementContainer"]:has(.card-anchor),.element-container:has(.card-anchor){display:none!important;}
@@ -117,7 +123,10 @@ div[data-testid="stColumn"]:has(div[data-testid="stCheckbox"]),div[data-testid="
 /* Bảng nhập liệu, tải file, chọn */
 div[data-testid="stDataFrame"],div[data-testid="stDataEditor"]{border-radius:16px;overflow:hidden;border:1px solid var(--line);}
 section[data-testid="stFileUploaderDropzone"],div[data-testid="stFileUploaderDropzone"]{background:var(--bg);border:1px dashed var(--line);border-radius:18px;}
-.stApp div[data-baseweb="select"]>div{border-radius:12px;background:#fff;border:1px solid var(--line);min-height:44px;color:#000;}
+.stApp div[data-baseweb="select"]>div{border-radius:12px;background:#fff!important;border:1px solid var(--line);min-height:44px;color:#000!important;}
+.stApp div[data-baseweb="select"] *{color:#000!important;}
+div[data-baseweb="popover"] *{color:#000!important;background-color:#fff;}
+div[data-baseweb="popover"] li:hover{background-color:#f0f0f3!important;}
 .stApp [data-testid="stCaptionContainer"],.stApp .stCaption{color:#000;}
 
 /* Thông báo: chữ đen trên nền sáng; lỗi/cảnh báo dùng chữ đỏ để nhấn mạnh */
@@ -156,6 +165,7 @@ section[data-testid="stFileUploaderDropzone"],div[data-testid="stFileUploaderDro
 .order b{font-weight:600;}
 
 /* Diễn giải tiến trình */
+sub{font-size:.75em;line-height:0;}
 ul.steps{list-style:none;margin:10px 0 0;padding:0;}
 ul.steps li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;border-bottom:1px solid var(--soft);}
 ul.steps li:last-child{border-bottom:none;}
@@ -169,8 +179,9 @@ ul.steps em{font-style:normal;font-size:15px;color:#000;}
   div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-anchor):not(:has(div[data-testid="stVerticalBlockBorderWrapper"] .card-anchor)){padding:28px 20px 26px!important;}
   .stApp div[role="radiogroup"]{display:flex;}
   .stApp div[role="radiogroup"] label{padding:7px 12px;}
+  :root{--pad:20px;}
   .hero{flex-direction:column;align-items:flex-start;}
-  .hero .t{text-align:right;align-self:flex-end;}
+  .hero .s{text-align:left;}
 }
 </style>
 """
@@ -203,8 +214,12 @@ def html_table(df: pd.DataFrame, formats: dict | None = None, highlight=None, de
     """Vẽ bảng chỉ đọc bằng HTML để đồng bộ phong cách; cột số căn phải."""
     formats = formats or {}
     numeric = [i > 0 and pd.api.types.is_numeric_dtype(df[c]) for i, c in enumerate(df.columns)]
+    def sub(text: str) -> str:
+        # Đổi chỉ số dưới dạng gạch dưới (F_j, C_j...) thành chỉ số dưới thật.
+        return re.sub(r"(?<=[A-Za-z])_([A-Za-z0-9]+)", r"<sub>\1</sub>", esc(text))
+
     head = "".join(
-        f'<th class="{"num" if num else ""}">{esc(c)}</th>' for c, num in zip(df.columns, numeric)
+        f'<th class="{"num" if num else ""}">{sub(c)}</th>' for c, num in zip(df.columns, numeric)
     )
     body = []
     for rec in df.to_dict("records"):
@@ -285,8 +300,8 @@ def plot_gantt_chart(schedule_result: dict, result_df: pd.DataFrame, rule_key: s
 def header_ui():
     st.markdown(
         '<div class="nav"><div><b>Điều độ trong chuỗi cung ứng</b><span>L02 - Nhóm 4</span></div></div>'
-        '<div class="hero"><div class="s">Các giải thuật điều độ kinh nghiệm</div>'
-        '<div class="t">Điều độ máy đơn</div></div>',
+        '<div class="hero"><div class="t">Điều độ máy đơn</div>'
+        '<div class="s">Các giải thuật điều độ kinh nghiệm</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -333,8 +348,8 @@ def data_section_ui() -> pd.DataFrame:
                 unsafe_allow_html=True,
             )
 
-        st.caption("Nhấn dấu + cuối bảng để thêm dòng, chọn dòng rồi nhấn Delete để xóa.")
-        return st.data_editor(
+        st.caption("Nhấn dấu + cuối bảng để thêm dòng. Để xóa, chọn công việc ở ô bên dưới rồi nhấn Xóa.")
+        edited_df = st.data_editor(
             st.session_state.df,
             num_rows="dynamic",
             key=f"data_editor_{st.session_state.editor_version}",
@@ -347,6 +362,21 @@ def data_section_ui() -> pd.DataFrame:
             },
             **STRETCH,
         )
+
+        job_ids = [str(j) for j in edited_df["job_id"].dropna()]
+        col_pick, col_del = st.columns([4, 1])
+        with col_pick:
+            to_delete = st.multiselect("Chọn công việc cần xóa", options=job_ids,
+                                       placeholder="Chọn một hoặc nhiều công việc")
+        with col_del:
+            st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
+            if st.button("Xóa", key="delete_jobs", **STRETCH) and to_delete:
+                keep = ~edited_df["job_id"].astype(str).isin(to_delete)
+                st.session_state.df = edited_df[keep].reset_index(drop=True)
+                st.session_state.editor_version += 1
+                st.session_state.results = {}
+                st.rerun()
+        return edited_df
 
 
 # -----------------------------------------------------------------------------
@@ -438,7 +468,7 @@ def gantt_section_ui():
         )
         res = st.session_state.results[selected_rule]
         st.plotly_chart(plot_gantt_chart(res["schedule_result"], res["result_df"], selected_rule),
-                        config={"displayModeBar": False}, **STRETCH)
+                        theme=None, config={"displayModeBar": False}, **STRETCH)
 
         st.markdown('<div class="mini">Diễn giải tiến trình gia công</div>', unsafe_allow_html=True)
         items = []
