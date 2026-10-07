@@ -239,14 +239,14 @@ def calculate_job_results(jobs, schedule_result):
 def calculate_metrics(result_df, rule_name):
     """Các KPI tổng hợp của một luật"""
     total_p = float(result_df["p"].sum())
-    total_c = float((result_df["completion_time"] - result_df["r"]).sum())
+    total_f = float((result_df["completion_time"] - result_df["r"]).sum())
     return {
         "Luật": rule_name,
         "Tổng thời gian gia công": total_p,
-        "Tổng thời gian hoàn thành": total_c,
-        "Độ hữu dụng": total_p / total_c,
-        "Số lượng công việc trung bình trong hệ thống": total_c / total_p,
-        "Thời gian trung bình trong hệ thống": total_c / len(result_df),
+        "Tổng thời gian hoàn thành": total_f,
+        "Độ hữu dụng": total_p / total_f,
+        "Số lượng công việc trung bình trong hệ thống": total_f / total_p,
+        "Thời gian trung bình trong hệ thống": total_f / len(result_df),
     }
 
 
